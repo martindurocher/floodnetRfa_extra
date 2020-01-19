@@ -1,0 +1,163 @@
+---
+title: "super_region"
+author: "Martin Durocher"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE}
+## Set colors for displaying the clusters
+mycol12 <- c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c',
+						 '#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928')
+
+col2pch <- function(z) z %/%12 + 16 
+palette(mycol12)
+```
+
+## Introduction
+
+For a hydrometric station with few years of observations the uncertainty of estimated flood quantiles can be large.
+In such a situation, pooled frequency analysis may be used to reduce model variability by transferring information from nearby sites to a target site.
+Pooling groups are formed according to a notion of distance and  FloodNet recommends using a measure of similarity based on the regularity and the timing of annual maximum discharges.
+The rivers in Canada have a vast diversity of flood regime and the idea of super regions was introduced to pre-filter the hydrometric stations into hydrologically relevant groups before performing pool analysis. 
+The package `floodnetProject16` comes with a set of already selected gauged stations `gaugedSites` where super regions are suggested. 
+This document explained how they were obtained.
+
+## Methodology
+
+We consider two spaces, the descriptor and the geographical space.
+The descriptor space has for coordinates the drainage area (AREA) and mean annual precipitation (MAP), while the geographical space has longitude and latitude for coordinates.
+In Canada, AREA and MAP can be used as surrogates for climate and scale.
+See Mostofi Zadeh and Burn (2019) for more details.
+The graphic below shows the 1114 gauged stations of interest inside these two spaces.
+
+```{r, fig.height=5, fig.width=10}
+
+library(floodnetRfa)
+library(CSHShydRology)
+
+desc <- log(gaugedSites[,c('area','map')])
+coord <- gaugedSites[,c('lon','lat')]
+
+## Generic function to plot the geographical and physical spaces.
+myfig <- function(col = 'black', pch = 16, legend.plot = TRUE){
+  
+  layout(matrix(c(1,2), 1,2))
+  
+  ucol <- sort(unique(col))
+  
+  sp::plot(map_ca)
+  title(main = 'Geographical space', xlab = 'LON', ylab = 'LAT')
+  axis(1)
+  axis(2)
+  
+  points(coord, pch = pch, col = col, ylim = c(42, 73), cex = .8)
+  
+  if(legend.plot)
+    legend('top', horiz = TRUE,legend = seq_along(ucol), col = ucol, pch = pch, cex = .6)
+  
+  plot(desc, pch = pch, col = col, 
+           xlab = 'AREA (log)',
+           ylab = 'MAP (log)',
+           main = 'Descriptor space')
+  
+}
+
+myfig(legend.plot = FALSE)
+```
+
+To create super regions, we used the Euclidean distance between a transformation of the four coordinates previously mentioned.
+We take the log transformation on AREA and MAP to obtain descriptors that are more densely concentrated around its central values (Normally shape) and we employ multidimensional scaling to project the geographical coordinates in a 2D space that tends to preserve the great-circle distance.
+Moreover, all transformed coordinates are centred and scaled before evaluating the distance.
+
+```{r}
+## Project the coordinate using Multidimensional scaling
+ecoord <- -cmdscale(GeoDist(coord),2)
+colnames(ecoord) <- c('lon','lat')
+
+xd <- cbind(scale(ecoord), scale(desc))
+```
+
+## Results
+
+Hierarchical clustering techniques have often been used to delineate hydrologically homogenous regions.
+Considering more specifically Ward's method where all sites are initially considered as their own cluster and are gradually paired up with the objective to optimize the intra-variance between clusters.
+This procedure creates a structure in the form of a tree that can be used to form meaningful super regions. 
+
+The graphic below illustrates super regions of 6 and 12 clusters, which corresponds to the columns `supreg_hc*` in `gaugedSites`.
+The number of clusters is selected based on the relevance of the extract features according to the author's personal judgment.
+We see that the super regions are relatively compact in both the geographical and the descriptor space.
+
+```{r, fig.height=5, fig.width=10}
+## Perform the classification
+
+hc <- hclust(dist(xd), method = 'ward.D2')
+
+## Function that reorgnanize the group label by size
+OrderGrp <- function(z){
+  lon <- tapply(coord[,1], z, median)
+  mapid <- match(1:length(lon),order(lon))
+  mapid[z]
+}
+
+## Identify 4 clusters
+hc.grp6 <- OrderGrp(cutree(hc, k = 6))
+hc.grp12 <- OrderGrp(cutree(hc, k = 12))
+
+table(hc.grp6)
+table(hc.grp12)
+
+myfig(col = hc.grp6)
+myfig(col = hc.grp12)
+
+```
+
+Another method employed to form super regions is the k-mean clustering technique, where each cluster is defined as the set of the nearest sites to a predetermined set of center points. 
+The algorithm is initialized by selecting random centers and update them until reaching optimized intra-cluster variance.
+The figures below illustrate super regions of size 6 and 12 using k-mean clustering, which corresponds to the columns `supreg_km*` in `gaugedSites`.
+In particular `supreg_km12` identifies super regions roughly representing:
+
+1. North territories - Large area
+2. Pacific Coast
+3. North of western provinces - Medium Area
+4. Fraser and Okanagan Valleys
+5. North of Western provinces - Large Area
+6. South of Western provinces - Large Area
+7. Prairies
+8. Southern Ontario
+9. Eastern provinces, very small watersheds
+10. North of Ontario and Quebec
+11. Southern Quebec and Maritimes
+12. Newfoundland
+
+```{r, fig.height=5, fig.width=10}
+## Identify 4 clusters
+set.seed(43)
+km.grp6 <- OrderGrp(kmeans(xd, 6, nstart = 100)$cluster)
+km.grp12 <- OrderGrp(kmeans(xd, 12, nstart = 100)$cluster)
+
+myfig(col = km.grp6)
+myfig(col = km.grp12)
+```
+
+
+```{r}
+## Final data
+supreg <- data.frame(
+  supreg_hc6  = hc.grp6,
+  supreg_hc12 = hc.grp12,
+  supreg_km6  = km.grp6,
+  supreg_km12 = km.grp12)
+
+```
+
+## References
+
+* Mostofi Zadeh, S., & Burn, D. H. (2019). A Super Region Approach to
+Improve Pooled Flood Frequency Analysis. Canadian Water Resources Journal
+/ Revue Canadienne Des Ressources Hydriques, 0(0), 1–14.
+https://doi.org/10.1080/07011784.2018.1548946

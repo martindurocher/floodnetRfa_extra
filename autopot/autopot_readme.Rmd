@@ -1,0 +1,114 @@
+---
+title: "autopot"
+author: "Martin Durocher"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Introduction
+
+The datasets `gaugedSites` contains candidate thresholds that can be used for performing Peaks Over Threshold (POT) analysis. 
+This document explained how they were obtained.
+
+## Description
+
+The script `autopot_script.R` is used to find candidate thresholds for the 1114 stations in the datasets.
+The computing is done in parallel for multiple sites using the function `FitPot` of the R-package `CSHShydRology`.
+
+For each site, summary graphics are saved in the CACHE folder, which shows the evolution of the p-value of the Anderson-Darling (AD) test, the mean residual life (MRL), the shape parameter of the generalized Pareto distribution and the 10-year flood quantiles.
+Figure 1 shows an example of such a summary graph.
+
+#### Figure 1: Example of a summary graph
+
+<center>
+  <img src="01AD002.png" height="960" width="900">
+</center>
+
+The candidate thresholds are sought among all observed values. 
+A smooth estimation of the number of peaks per year (PPY) is obtained using isotonic regression due to fluctuations in the PPY as the threshold increase. 
+This behaviour is created by the nature of the declustering method.
+
+The automatic threshold (solid red line) is obtained as the first threshold with `PPY <= 2.5` and `AD > 0.25`. 
+If none of the candidates respect such criterion, the threshold with the maximum AD is used instead.
+This threshold is found in `gaugedSites` under the column `auto`
+
+The table below indicates the proportions of thresholds found by PPY and super regions.
+Some super regions have a higher percentage of sites where the automatic threshold was selected below 1.5 PPY, which can be explained by a flood regime that is dominated by spring freshets.
+For these sites, the flood frequency analysis would likely be more accurate using the annual maximum approach. 
+
+
+##### Table 1: Proportion of PPY by super regions.
+
+```{r, echo = FALSE}
+suppressPackageStartupMessages(require(floodnetRfa))
+ppy.id <- which(substr(names(gaugedSites), 1,3) == 'ppy')
+x <- apply(gaugedSites[, ppy.id], 2, '<=', gaugedSites$auto)
+
+ppy <- apply(x, 1, sum)
+ppy <- cut(ppy, c(0,2,4,6,7))
+ppy <- factor(ppy, labels = c('[2.5,2.0]','(2,1.5]', '(1.5,1]', '(1,0]'))
+
+Fun <- function(z){ 
+    z <- as.vector(table(z))
+    round(100*z/ sum(z),1)
+}
+
+lst <- tapply(ppy, gaugedSites$supreg_km6, Fun)
+xt <- do.call(rbind,lst)
+colnames(xt) <- levels(ppy)
+xt
+```
+
+## Super regions
+
+The results are reported by super regions, which represent larger groups of stations with similar characteristics.
+The descriptor space locates the stations in terms of its drainage area (AREA) and Mean Annual Precipitation (MAP).  
+
+* Super region 1 are stations found mainly in the northern part of Canada. 
+ The basins are generally large with few annual precipitations.
+
+* Super region 2 are stations found mainly on the Pacific coast and the Fraser Valley.  
+ The basins have important annual precipitation.
+
+* Super region 3 are stations found mainly in the Prairies and the mountains of British Columbia. 
+ The basins are generally small with few annual precipitations.
+
+* Super region 4 are stations found mainly in the north of the Canadian western provinces.
+  The basins are generally large with important annual precipitations.  
+  
+* Super region 5 are stations found mainly in Southern Ontario.
+  The basins are generally small with important annual precipitations.
+  
+* Super region 6 are stations found mainly in the eastern part of Canada.
+  The basins generally have important annual precipitations.
+
+```{r, echo = FALSE, fig.width=9, fig.height = 5}
+
+## Set colors for displaying the clusters
+mycol <- c('#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33')
+palette(mycol)
+
+layout(matrix(c(1,2), 1,2))
+  
+coord <- gaugedSites[,c('lon','lat')]
+
+desc <- log(gaugedSites[,c('area','map')])
+
+col <- gaugedSites$supreg_km6
+ucol <- sort(unique(col))
+  
+sp::plot(map_ca)
+title(main = 'Geographical space')
+axis(1)
+axis(2)
+
+points(coord, pch = 16, col = col)
+  
+legend('top', horiz = TRUE,legend = seq_along(ucol), col = ucol, 
+             pch = rep(16,12), cex = .6)
+  
+  plot(desc, pch = 16, col = col, 
+           xlab = 'AREA (log)',
+           ylab = 'MAP (log)',
+           main = 'Descriptor space')
+```
