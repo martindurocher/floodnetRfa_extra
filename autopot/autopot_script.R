@@ -264,6 +264,8 @@ colnames(xthresh) <- c('station', 'year.amax', 'year.pot',
 											 'auto', 'ppy250', 'ppy225', 'ppy200',
 											 'ppy175', 'ppy150', 'ppy125', 'ppy100')
 
+write.csv(xthresh, file = gzfile('autopot/autopot.csv.gz'), row.names = FALSE)
+
 ## verify which stations did not succeeded
 fail.id <- which(!gaugedSites$station %in% xthresh$station)
 print(fail.id)

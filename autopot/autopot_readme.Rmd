@@ -1,5 +1,5 @@
 ---
-title: "autopot"
+title: "Automatically Selecting Thresholds"
 author: "Martin Durocher"
 date: "`r Sys.Date()`"
 output: html_document
@@ -25,24 +25,26 @@ Figure 1 shows an example of such a summary graph.
 </center>
 
 The candidate thresholds are sought among all observed values. 
-A smooth estimation of the number of peaks per year (PPY) is obtained using isotonic regression due to fluctuations in the PPY as the threshold increase. 
-This behaviour is created by the nature of the declustering method.
+A smooth estimation of the number of peaks per year (PPY) is obtained using isotonic regression due to fluctuations in the PPY, which is created by the declustering method.
 
 The automatic threshold (solid red line) is obtained as the first threshold with `PPY <= 2.5` and `AD > 0.25`. 
 If none of the candidates respect such criterion, the threshold with the maximum AD is used instead.
-This threshold is found in `gaugedSites` under the column `auto`
+This corresponds to the column `auto`.
 
-The table below indicates the proportions of thresholds found by PPY and super regions.
-Some super regions have a higher percentage of sites where the automatic threshold was selected below 1.5 PPY, which can be explained by a flood regime that is dominated by spring freshets.
-For these sites, the flood frequency analysis would likely be more accurate using the annual maximum approach. 
-
+The results are reported by super regions, which regroups stations with similar properties.
+Please see the description at the end of the document.
+Table 1 indicates that the proportions of thresholds with specific PPY according to its super region. We see that super regions 1, 3 and 4 have a higher percentage of sites where the automatic threshold was selected below 1.5 PPY, which can be explained by a majority of sites where the flood regime is dominated by the spring freshet.
+On the other hand, more than most of the stations in super regions 2, 5 and 6 have more than 2 PPY.
 
 ##### Table 1: Proportion of PPY by super regions.
 
 ```{r, echo = FALSE}
 suppressPackageStartupMessages(require(floodnetRfa))
-ppy.id <- which(substr(names(gaugedSites), 1,3) == 'ppy')
-x <- apply(gaugedSites[, ppy.id], 2, '<=', gaugedSites$auto)
+
+xthresh <- read.csv(gzfile('autopot.csv.gz'))
+ppy.id <- which(substr(names(xthresh), 1,3) == 'ppy')
+
+x <- apply(xthresh[, ppy.id], 2, '<=', xthresh$auto)
 
 ppy <- apply(x, 1, sum)
 ppy <- cut(ppy, c(0,2,4,6,7))

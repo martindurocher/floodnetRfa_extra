@@ -1,5 +1,5 @@
 ---
-title: "trend"
+title: "Analyzing trends"
 author: "Martin Durocher"
 date: "`r Sys.Date()`"
 output: html_document
@@ -9,32 +9,31 @@ output: html_document
 
 The dataset `gaugedSites` presents the results of common trend tests that check the hypothesis of stationarity for either annual maximum discharge (AMAX) or peaks over threshold(POT).
 These p-values of these tests were obtained using the script `trend_script.R` and are briefly explained here.
+Please note that due to resampling techniques the results may slightly change.
 
-For AMAX series, the presence of a trend is verified by the Mann-Kendall test and the p-value is reported in the column `gaugedSites$trend_mk`.
+For AMAX series, the presence of a trend is verified by the Mann-Kendall test and the p-value is reported in the column `trend_mk`.
 The partial autocorrelation of the time series is verified and if there are significative lags, block bootstrap is used.
 In this case, blocks of size 1 + "the largest lag" is selected, if not higher than then a predetermined upper bound of 5.
-Also, the p-value of the Pettitt's test is considered to evaluate possible change points (`gaugedSites$trend_pt`).
+Also, the p-value of the Pettitt's test is considered to evaluate possible change points (`trend_pt`).
 
-For POT series, the trend in the mean excess is investigated using the Mann-Kendall test (`gaugedSites$trend_mx`).
+For POT series, the trend in the mean excess is investigated using the Mann-Kendall test (`trend_mx`).
 To verify the presence of a trend in the probability of exceeding the threshold, a logistic regression model is considered.
-The columns `gaugedSites$trend_lg` represents the p-value of the t-test that verifies if the slope of a linear trend is different from zero.
+The columns `trend_lg` represents the p-value of the t-test that verifies if the slope of a linear trend is different from zero.
 
 The script `trend_script.R` creates for each station a summary graphic that is saved in the CACHE folder. 
 The figure below shows the estimated trends and reports the p-values.
 
-In most cases, the considered trends are not significant. 
 The table below indicates the proportion of stations where significant trends are found at a level of $\alpha = 0.05$.
-The result is grouped in 6 super regions that include stations with similar properties.
-Trends in the frequency of the peaks (`trend_lg`) appear to be the most common cause of nonstationarity and it is more frequent in the Prairies and Southern Ontario 
+The results are grouped in 6 super regions and show that in a large majority of stations the trend is not significant. 
+Trends in the frequency of the peaks (`trend_lg`) appear to be the most common cause of nonstationarity and are more frequent in the Prairies and Southern Ontario 
 
 ##### Table: Proportions of sites with trends by super regions.
 
 ```{r, echo = FALSE}
 suppressPackageStartupMessages(require(floodnetRfa))
-trend.id <- which(substr(names(gaugedSites), 1,5) == 'trend')
-trend <- apply(gaugedSites[, trend.id], 2, '<', 0.05)
-trend <- as.data.frame(trend)
-colnames <- c('amax.mk','amax.pt','pot.mk','pot.lg')
+
+trend <- read.csv(gzfile('trend.csv.gz'))
+trend <- as.data.frame(trend[,-1] < 0.05)
 
 lst <- split(trend, gaugedSites$supreg_km6)
 round(sapply(lst, colMeans)*100,1)
@@ -95,7 +94,7 @@ legend('top', horiz = TRUE,legend = seq_along(ucol), col = ucol,
            main = 'Descriptor space')
 ```
 
-##### Example of a summary graphic
+## Example of a summary graph
 
 The top graphic shows the trend in the annual maximum streamflow. 
 The estimated trend is represented by a solid red line and the p-value of the Mann-Kendall(MK) and Pettitt (PT) test are reported in the title.

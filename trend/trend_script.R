@@ -36,7 +36,7 @@ if(!file.exists('cache'))
 if(!file.exists(DIR_CACHE))
 	dir.create(DIR_CACHE)
 
-progress.file <- file.path(CACHE, 'progress.log')
+progress.file <- file.path(DIR_CACHE, 'progress.log')
 
 ## Load the list of stations to analyse
 stations <- gaugedSites$station
@@ -51,7 +51,7 @@ registerDoParallel(cl)
 
 statu <- foreach(ii = seq_along(stations),
                  .errorhandling = 'pass',
-                 .packages = c('CSHShydRology', 'floodnetProject16',
+                 .packages = c('CSHShydRology', 'floodnetRfa',
                  							'Kendall','boot','trend')) %dopar%{
 
   site <- stations[ii]
@@ -104,7 +104,7 @@ statu <- foreach(ii = seq_along(stations),
 
   pval.file <- paste0(paste0(site, '.csv'))
   write.csv(round(all.pvalue,4),
-  					file = file.path(CACHE, pval.file),
+  					file = file.path(DIR_CACHE, pval.file),
   					row.names = FALSE)
 
   ####################################
@@ -120,7 +120,7 @@ statu <- foreach(ii = seq_along(stations),
 
 
   fig.file <- paste0(paste0(site, '.png'))
-	png(file = file.path(CACHE, fig.file), height = 1.33*RES, width = RES)
+	png(file = file.path(DIR_CACHE, fig.file), height = 1.33*RES, width = RES)
 
 	par(mfrow = c(2,1), mar = c(5,5,5,5))
 
@@ -180,10 +180,12 @@ stopCluster(cl)
 ## Read and merging the output
 ###########################################
 
-sfiles <- list.files(CACHE, full.names = FALSE, pattern = '*.csv')
+sfiles <- list.files(DIR_CACHE, full.names = FALSE, pattern = '*.csv')
 snames <- substr(sfiles,1,7)
-trend <- lapply(file.path(CACHE, sfiles), read.csv)
+trend <- lapply(file.path(DIR_CACHE, sfiles), read.csv)
 trend <- cbind(station = snames, do.call(rbind, trend))
+
+write.csv(trend, file = zip('trend/trend.csv.gz'), row.names = FALSE)
 
 ## verify which stations did not succeeded
 fail.id <- which(!gaugedSites$station %in% trend$station)

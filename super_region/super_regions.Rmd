@@ -1,5 +1,5 @@
 ---
-title: "super_region"
+title: "Delineating Super Region"
 author: "Martin Durocher"
 date: "`r Sys.Date()`"
 output: html_document
