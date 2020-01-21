@@ -18,7 +18,7 @@ NCPU <- 4
 RES <- 480
 
 ## script and cache folder
-DIR_OUT <- 'RFA/extdata'
+DIR_OUT <- 'RFA'
 DIR_CACHE <- 'cache/atsite'
 
 ################################################################################
@@ -41,7 +41,7 @@ write(format(t0), file = error.file)
 cl <- makeCluster(NCPU)
 registerDoParallel(cl)
 
-statu <- foreach(ii = 1:8, #nrow(gaugedSites),
+statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 								 .packages = 'floodnetRfa',
 								 .errorhandling = 'pass') %dopar%{
 

@@ -19,7 +19,7 @@ NCPU <- 4
 RES <- 360
 
 ## script and cache folder
-DIR_OUT <- 'RFA/extdata'
+DIR_OUT <- 'RFA'
 DIR_CACHE <- 'cache/RFA'
 
 
@@ -62,7 +62,7 @@ supreg.pot <- with(info.pot, split(station, supreg_km12))
 ## Perform all RFA
 #############################################################
 
-statu <- foreach(ii = 1:6,#1:nrow(gaugedSites),
+statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 								 .packages = c('floodnetRfa', 'CSHShydRology'),
 								 .errorhandling = 'pass') %dopar%{
 
@@ -282,13 +282,23 @@ write(format(Sys.time() - t0), file = progress.file, append = TRUE)
 ##############################################
 
 all.files <- list.files(DIR_CACHE, full.names = TRUE, pattern = '*.csv')
-all.files <- all.files[grep('rfAmax|rfPot',all.files)]
+rfa.files <- all.files[grep('rfAmax|rfPot',all.files)]
+hetero.files <- all.files[grep('hetero',all.files)]
 
-out <- lapply(all.files, read.csv)
+## rfa
+out <- lapply(rfa.files, read.csv)
 out <- do.call(rbind,out)
 outfile <- gzfile(file.path(DIR_OUT, 'rfa_flood_quantiles.csv.gz'))
+write.csv(out, file = outfile, row.names = FALSE)
+
+## Hetero
+out <- lapply(hetero.files, read.csv)
+out <- do.call(rbind,out)[,c(1:2,4:5)]
+outfile <- gzfile(file.path(DIR_OUT, 'heteo.csv.gz'))
 write.csv(out, file = outfile, row.names = FALSE)
 
 ## verify for stations that have not been analyzed
 cache.files <- substr(list.files(DIR_CACHE, pattern = '*.png'), 1,7)
 which(!(gaugedSites$station %in% cache.files))
+
+
