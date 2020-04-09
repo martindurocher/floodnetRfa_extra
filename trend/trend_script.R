@@ -1,3 +1,9 @@
+#############################################################
+## Objective: Evaluate p-value of standard trend tests for multiple sites.
+## See the trend_readme for more details
+## The project folder should be the working directory
+############################################################
+
 library(floodnetRfa)
 library(foreach)
 library(doParallel)
@@ -8,7 +14,7 @@ rm(list = ls())
 source('trend/trend_lib.R')
 
 ## Path of the HYDAT database
-## Create a variable DB_HYDAT
+## Create a variable DB_HYDAT and GAUGEDSITES
 source('config')
 
 ## Size of the bootstrap sample
@@ -17,11 +23,11 @@ NSIM <- 2000
 ## Resolution of the output figure
 RES <- 560
 
-## Polynomial degree consider for smoothing graph should be 1:3
+## Polynomial degree consider for smoothing graph should be 1:3 for order 1 to 3.
 DEG <- 1:3
 
 ## Number of parallel processus
-NCPU <- 4
+NCPU <- 3
 
 ## Temporary files used during parallel computing
 DIR_CACHE <- 'cache/trend'
@@ -39,7 +45,7 @@ if(!file.exists(DIR_CACHE))
 progress.file <- file.path(DIR_CACHE, 'progress.log')
 
 ## Load the list of stations to analyse
-stations <- gaugedSites$station
+stations <- GAUGEDSITES$station
 
 ## Monitoring file for parallel computing
 t0 <- Sys.time()
@@ -64,7 +70,7 @@ statu <- foreach(ii = seq_along(stations),
 	##########################
 
   ## read annual maximum from HYDAT
-  an <- AmaxData(site,DB_HYDAT)[,-1]
+  an <- AmaxData(DB_HYDAT,site)[,-1]
   nyear <- nrow(an)
 
   ## Compute the p-value of the MannKendall test
@@ -80,11 +86,11 @@ statu <- foreach(ii = seq_along(stations),
 	##########################
 
   ## Read Daily data
-  xd <- DailyData(site, DB_HYDAT)[,-1]
+  xd <- DailyData(DB_HYDAT, site)[,-1]
 
   ## Identify peaks using previously selected thresholds
-  u <- gaugedSites[gaugedSites$station == site, 'auto']
-  area <- gaugedSites[gaugedSites$station == site, 'area']
+  u <- GAUGEDSITES[GAUGEDSITES$station == site, 'auto']
+  area <- GAUGEDSITES[GAUGEDSITES$station == site, 'area']
   peaks <- which.floodPeaks(value~date, xd , u = u, r = 4 + log(area))
 
   ## Compute p-value for the logistic model (Trend in number of peaks)
@@ -125,12 +131,15 @@ statu <- foreach(ii = seq_along(stations),
 	par(mfrow = c(2,1), mar = c(5,5,5,5))
 
 	##---- Plot the AMAX ----##
-  plot(an, type = 'b',
+	an$year  <- as.integer(format(an$date, '%Y'))
+	
+  plot(value ~ year, an, type = 'b',
   		 xlab = 'Year', ylab = 'Annual maxima',
   		 main = paste0(site,': MK=', round(mk.pvalue,3),
   		 							 '; PT=', round(pt.pvalue,3) ))
 
   ## estimate a smooth trend
+  
   FunFit <- function(z) lm(log(value) ~ poly(year,z), an)
   an.sm <- Map(FunFit, DEG)
   an.sm <- an.sm[[which.min(sapply(an.sm,AIC))]]
@@ -177,7 +186,7 @@ statu <- foreach(ii = seq_along(stations),
 stopCluster(cl)
 
 ###########################################
-## Read and merging the output
+## Read and merging the parallel output
 ###########################################
 
 sfiles <- list.files(DIR_CACHE, full.names = FALSE, pattern = '*.csv')
@@ -185,8 +194,10 @@ snames <- substr(sfiles,1,7)
 trend <- lapply(file.path(DIR_CACHE, sfiles), read.csv)
 trend <- cbind(station = snames, do.call(rbind, trend))
 
-write.csv(trend, file = zip('trend/trend.csv.gz'), row.names = FALSE)
+outfile <- gzfile('trend/trend.csv.gz')
+## Uncomment to save new changes
+#write.csv(trend, file = outfile, row.names = FALSE)
 
 ## verify which stations did not succeeded
-fail.id <- which(!gaugedSites$station %in% trend$station)
+fail.id <- which(!GAUGEDSITES$station %in% trend$station)
 print(fail.id)

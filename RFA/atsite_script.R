@@ -12,7 +12,7 @@ source('config')
 NSIM <- 2000
 
 ## Number of parallel processes
-NCPU <- 4
+NCPU <- 3
 
 ## Resolution figures
 RES <- 480
@@ -41,13 +41,13 @@ write(format(t0), file = error.file)
 cl <- makeCluster(NCPU)
 registerDoParallel(cl)
 
-statu <- foreach(ii = 1:4, #nrow(gaugedSites),
+statu <- foreach(ii = 1:4, #nrow(GAUGEDSITES),
 								 .packages = 'floodnetRfa',
 								 .errorhandling = 'pass') %dopar%{
 
-	site <- as.character(gaugedSites$station[ii])
-	thresh <- gaugedSites$auto[ii]
-	area <- gaugedSites$area[ii]
+	site <- as.character(GAUGEDSITES$station[ii])
+	thresh <- GAUGEDSITES$auto[ii]
+	area <- GAUGEDSITES$area[ii]
 
 	####################
 	## Carry out AMAX ##
@@ -56,7 +56,8 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
   write(paste0(ii, ' - Analyzing ', site),
 				file = progress.file, append = TRUE)
 
-	amax <- try(FloodnetAmax(site = site, db = DB_HYDAT, out.model = TRUE,
+	an <- AmaxData(DB_HYDAT, site)
+	amax <- try(FloodnetAmax(an, out.model = TRUE,
 													verbose = FALSE, nsim = NSIM), silent = TRUE)
 
 	if(class(amax) != 'try-error'){
@@ -65,7 +66,8 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 		out.amax <- TRUE
 
 	} else {
-		write(paste0('Error analyzing AMAX for station: ', site,']'),)
+		write(paste0('Error analyzing AMAX for station: ', site,']'), 
+					file = error.file, append = TRUE)
 		out.amax <- FALSE
 	}
 
@@ -73,7 +75,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	## Carry out POT ##
 	###################
 
-	xd <- try(DailyData(site, DB_HYDAT, pad = TRUE, tol = 346)[,-1])
+	xd <- try(DailyData(DB_HYDAT, site, pad = TRUE, tol = 346)[,-1])
 
 	nyear <- ifelse(class(xd) == 'try-error', 0,
 				          length(unique(format(xd$date, '%Y'))))
@@ -85,7 +87,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	}
 
 
-	pot <- try(FloodnetPot(site = site, x = xd, u = thresh, area = area,
+	pot <- try(FloodnetPot(xd, u = thresh, area = area,
 												 verbose = FALSE, nsim = NSIM,
 												 out.model = TRUE), silent = TRUE)
 
@@ -95,7 +97,8 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 		out.pot <-  TRUE
 
 	} else {
-		write(paste0('Error analyzing POT for station: ', site,']'),)
+		write(paste0('Error analyzing POT for station: ', site,']'), 
+					file = error.file, append = TRUE)
 		out.pot <- FALSE
 	}
 
@@ -104,56 +107,28 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	###################
 
 
-	{fig.file <- paste0(paste0(site, '.png'))
+	fig.file <- paste0(paste0(site, '.png'))
 	png(file = file.path(DIR_CACHE, fig.file), height = 1.5*RES, width = 2*RES)
-
 
 	layout(matrix(1:4,2,2))
 
 	## allocate memory
 	rg.amax <- rg.pot <- NULL
 
-	if(out.amax){
+	if(out.amax)
+		plot(amax) + 
+			labs(title = paste0('AMAX: ', site), caption = paste0('N: ',nb.amax)) 
+		
 
-		qua.amax <- data.frame(
-	    qt = with(amax$qua, value[ variable == 'quantile']),
-	    se = with(amax$qua, value[ variable == 'se']),
-	    lb = with(amax$qua, value[ variable == 'lower']),
-	    ub = with(amax$qua, value[ variable == 'upper']))
+	if(out.pot)
+		plot(pot) + 
+			labs(title = paste0('POT'), caption = paste0('N: ',nb.pot)) 
 
-		nb.amax <- length(amax$fit$data)
-		rg.amax <- range(as.vector(qua.amax[,-2]))
-		rg.amax <- rg.amax + c(-1,1) * 0.05 * diff(rg.amax)
-
-		do.ci <- all(is.finite(suppressWarnings(sqrt(diag(amax$fit$varcov)))))
-
-		plot(amax$fit, ci = do.ci, main = paste0('AMAX: ', site),
-				 ylim = range(c(rg.amax, amax$fit$data)),
-				 sub = paste0('N: ',nb.amax))
-
-
-	}
-
-	if(out.pot){
-
-		qua.pot <- data.frame(
-		 qt = with(pot$qua, value[ variable == 'quantile']),
-		 se = with(pot$qua, value[ variable == 'se']),
-	   lb = with(pot$qua, value[ variable == 'lower']),
-	   ub = with(pot$qua, value[ variable == 'upper']))
-
-		nb.pot <- length(pot$fit$excess)
-		rg.pot <- range(as.vector(qua.pot[,-2]))
-		rg.pot <- rg.pot + c(-1,1) * 0.05 * diff(rg.pot)
-
-		do.ci <- all(is.finite(suppressWarnings(sqrt(diag(pot$fit$varcov)))))
-
-		plot(pot$fit, ci = do.ci, main = paste0('POT'),
-				 ylim = range(c(rg.amax, pot$fit$excess+pot$fit$u)),
-				 sub = paste0('N: ', nb.pot))
-
-	}
-
+	cp <- CompareModels(amax, pot)
+	
+	plot(cp) + theme(legend.position = 'top') 
+	plot(cp, 'cv') + theme(legend.position = 'top') 
+	
 	## Return level plot ##
 	rg.qua <- range(c(rg.amax,rg.pot))
 
@@ -213,7 +188,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	  points(cv.pot, col = 'red', pch = 15)
 	}
 
-	dev.off()}
+	dev.off()
 
 }
 
@@ -229,10 +204,12 @@ write(format(Sys.time() - t0), file = error.file, append = TRUE)
 all.files <- list.files(DIR_CACHE, full.names = TRUE, pattern = '*.csv')
 out <- lapply(all.files, read.csv)
 out <- do.call(rbind,out)
+
 outfile <- gzfile(file.path(DIR_OUT, 'atsite_flood_quantiles.csv.gz'))
-write.csv(out, file = outfile, row.names = FALSE)
+## Uncomment to save new change
+#write.csv(out, file = outfile, row.names = FALSE)
 
 
 fail.files <- substr(list.files(DIR_CACHE, pattern = '*.png'), 1,7)
-which(!(fail.files %in% gaugedSites$station))
+which(!(fail.files %in% GAUGEDSITES$station))
 

@@ -1,15 +1,19 @@
 #########################################################
-## Function that perform the Mann-Kendall test
-## To evaluate the p-values, it automatically identify if
-## there is significant autocorrelation and perform bloc
-## bootstrap if needed.
-##
-## IN
-##   x: Vector of data
-##   lag.max: Largest lag to verify
-## OUT
-##   tau: Statistic of the test.
-##   pvalue: P-value of the test.
+#' Mann-Kendall's test with automatic selection of the lag
+#' 
+#' Function that perform the Mann-Kendall's test, and
+#' evaluate the p-values using block bootstrap when there is 
+#' autocorrelation.
+#' The lag parameter is automatically identified when necessary.
+#'
+#' @param x Vector of data
+#' @param lag.max Largest lag to verify
+#' 
+#' @return 
+#' \itemize{
+#'    \item tau : Statistic of the test.
+#'    \item pvalue : P-value of the test.
+#' }
 #########################################################
 AutoMK <- function(x, lag.max = 5){
 
@@ -42,14 +46,17 @@ AutoMK <- function(x, lag.max = 5){
 }
 
 #########################################################
-## Verify that there is no trend in the number of peaks
-## Logistic regression is performed with linear trend.
-##
-## IN
-##   x: Vector of covariate. Normally a time variable.
-##   peaks: Indices of the peaks in x
-## OUT
-##   ans: P-value of the test
+#' Trend in exceedance rate using logistic regression
+#' 
+#' Verify that there is no trend in the number of peaks.
+#' Logistic regression model with linear trend is applied and a t-test
+#' the p-value of the t-test for the slope is returned.
+#'
+#' @param x Vector of covariate. Normally a time variable.
+#' 
+#' @param peaks Indices of the peaks in x
+#' 
+#' @return Minimal p-value
 #########################################################
 
 TrendLogis <- function(x, peaks){
@@ -63,3 +70,26 @@ TrendLogis <- function(x, peaks){
   ## Return minimal p-value
   return(ans)
 }
+
+## Verify using a F-test that trend model in the exceedance probability
+## is better than the constant model
+# TrendLogis <- function(x, peaks){
+#
+#   ## Trend in logistic regression
+#   xbin <- data.frame(y = seq_along(x) %in% peaks, x = x)
+#  
+#   ## Constant model
+#   fit0 <- glm(y~1, xbin, family = quasibinomial())
+#
+#   ## alternative models
+#   fit <- vector('list', 3)
+#   fit[[1]] <- glm(y~x, xbin, family = quasibinomial())
+#   fit[[2]] <- glm(y~poly(x,2), xbin, family = quasibinomial())
+#   fit[[3]] <- glm(y~poly(x,3), xbin, family = quasibinomial())
+#
+#   ## Evaluate p-values of the F-test
+#   fun <- function(z) anova(fit0, z, test = 'F')[2,6]
+#
+#   ## Return minimal p-value
+#   return(min(vapply(fit,fun, numeric(1)), na.rm = TRUE))
+# }

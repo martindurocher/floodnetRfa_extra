@@ -46,29 +46,29 @@ registerDoParallel(cl)
 ## Create a list of stationary station for each super regions
 #############################################################
 
-stations <- gaugedSites$stations
-sdistance <- SeasonDistanceData(gaugedSites$station, DB_HYDAT)
+stations <- GAUGEDSITES$stations
+sdistance <- SeasonDistanceData(DB_HYDAT, GAUGEDSITES$station)
 
 ## filter nonstationary sites
-id.amax <- with(gaugedSites, trend_mk >= 0.05 & trend_pt >= 0.05)
-info.amax <- gaugedSites[id.amax,]
+id.amax <- with(GAUGEDSITES, trend_mk >= 0.05 & trend_pt >= 0.05)
+info.amax <- GAUGEDSITES[id.amax,]
 supreg.amax <- with(info.amax, split(station, supreg_km12))
 
-id.pot <- with(gaugedSites, trend_lg >= 0.05 & trend_mx >= 0.05)
-info.pot <- gaugedSites[id.pot,]
+id.pot <- with(GAUGEDSITES, trend_lg >= 0.05 & trend_mx >= 0.05)
+info.pot <- GAUGEDSITES[id.pot,]
 supreg.pot <- with(info.pot, split(station, supreg_km12))
 
 #############################################################
 ## Perform all RFA
 #############################################################
 
-statu <- foreach(ii = 1:4, #nrow(gaugedSites),
+statu <- foreach(ii = 1:4, #nrow(GAUGEDSITES),
 								 .packages = c('floodnetRfa', 'CSHShydRology'),
 								 .errorhandling = 'pass') %dopar%{
 
 
-	site <- as.character(gaugedSites$station[ii])
-	supreg.id <- gaugedSites$supreg_km12[ii]
+	site <- as.character(GAUGEDSITES$station[ii])
+	supreg.id <- GAUGEDSITES$supreg_km12[ii]
 	
 	## allocate memory
 	vars.ii <- data.frame(hamax = NA, namax = NA, erramax = TRUE,
@@ -83,11 +83,12 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	#######################
 
 	## Extract seasonal distance among the station in the super region
-	sreg.amax <- sort(unique(c(site,supreg.amax[[supreg.id]])))
-	sdist.amax <- sdistance[sreg.amax, sreg.amax]
+	sreg.amax <- as.character(supreg.amax[[supreg.id]])
+	sreg.amax <- sort(unique(c(site, sreg.amax)))
+	sdist.amax <- sdistance[site, sreg.amax]
 
 	## Extract annual maximums
-	an <- AmaxData(sreg.amax, db = DB_HYDAT, target = site, distance = sdist.amax)
+	an <- AmaxData(DB_HYDAT, sreg.amax, distance = sdist.amax)
 
 	## RFA
   amax <- try(FloodnetPool(an, target = site, nsim = NSIM,
@@ -106,7 +107,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 
 	} else {
 		write(paste0('Error analyzing RFA-AMAX for station: ', site,']'),
-					file = error.file)
+					file = error.file, append = TRUE)
 	}
   
  
@@ -115,14 +116,15 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	######################
 
   ## Extract seasonal distance 
-  sreg.pot <- sort(unique(c(site,supreg.pot[[supreg.id]])))
-	sdist.pot <- sdistance[sreg.pot,sreg.pot]
+  sreg.pot <- as.character(supreg.pot[[supreg.id]])
+  sreg.pot <- sort(unique(c(site,sreg.pot)))
+	sdist.pot <- sdistance[site,sreg.pot]
 	
 	## Extract stations info and peaks
-	info <- gaugedSites[gaugedSites$station %in% sreg.pot, 
+	info <- GAUGEDSITES[GAUGEDSITES$station %in% sreg.pot, 
 											c('station','auto','area')]
 
-  xd <- DailyPeaksData(info, db = DB_HYDAT, target = site, distance = sdist.pot)
+  xd <- DailyPeaksData(DB_HYDAT, info, distance = sdist.pot)
 
   ## RFA
   pot <- try(FloodnetPool(xd, target = site, nsim = NSIM, out.model = TRUE, 
@@ -141,7 +143,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 
 	} else {
 		write(paste0('Error analyzing RFA-POT for station: ', site,']'),
-					file = error.file)
+					file = error.file, append = TRUE)
 	}
   
   ##############################
@@ -155,13 +157,9 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	## Summary Figure
 	#######################
 
-  Fd <- function(z, mle = FALSE){
-  	ans <- list()
-  	
-  	ans$qt <- with(z, value[variable == 'quantile'])
-  	ans$se <- with(z, value[variable == 'rmse'])
-  	ans$lb <- with(z, value[variable == 'lower'])
-  	ans$ub <- with(z, value[variable == 'upper'])
+  Fd <- function(z){
+  	ans <- z
+  	colnames(ans) <- c('qt','se','lb','ub')
   	ans$cv <- ans$se/ans$qt *100
 
   	return(as.data.frame(ans))
@@ -187,10 +185,10 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 
 	#### Pooling groups ####
 	
-	pid <- gaugedSites$station %in% xd$sites
-	tid <- gaugedSites$station %in% site
-	scrd <- gaugedSites[,c('season_x', 'season_y')]
-	desc <- log(gaugedSites[,c('area', 'map')])
+	pid <- GAUGEDSITES$station %in% xd$site
+	tid <- GAUGEDSITES$station %in% site
+	scrd <- GAUGEDSITES[,c('season_x', 'season_y')]
+	desc <- log(GAUGEDSITES[,c('area', 'map')])
 
 	JulianPlot()
 	title(main = 'Seasonal space')
@@ -210,7 +208,7 @@ statu <- foreach(ii = 1:4, #nrow(gaugedSites),
 	rg.qua <- range(unlist(rgl))
 	rg.qua <- rg.qua + .02 * c(-1,1) * diff(rg.qua)
 
-	prov <- gaugedSites$prov[ii]
+	prov <- GAUGEDSITES$prov[ii]
 	
 	plot(0, 0,
 			 main = paste0(prov,' - ',site),
@@ -289,16 +287,20 @@ hetero.files <- all.files[grep('hetero',all.files)]
 out <- lapply(rfa.files, read.csv)
 out <- do.call(rbind,out)
 outfile <- gzfile(file.path(DIR_OUT, 'rfa_flood_quantiles.csv.gz'))
-write.csv(out, file = outfile, row.names = FALSE)
+
+## Uncomment to save new change
+#write.csv(out, file = outfile, row.names = FALSE)
 
 ## Hetero
 out <- lapply(hetero.files, read.csv)
 out <- do.call(rbind,out)[,c(1:2,4:5)]
 outfile <- gzfile(file.path(DIR_OUT, 'heteo.csv.gz'))
-write.csv(out, file = outfile, row.names = FALSE)
+
+## Uncomment to save new change
+#write.csv(out, file = outfile, row.names = FALSE)
 
 ## verify for stations that have not been analyzed
 cache.files <- substr(list.files(DIR_CACHE, pattern = '*.png'), 1,7)
-which(!(gaugedSites$station %in% cache.files))
+which(!(GAUGEDSITES$station %in% cache.files))
 
 

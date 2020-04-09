@@ -1,3 +1,10 @@
+#############################################################
+## Objective: Evaluate candidates threshold for multiple sites.
+## See the autopot_readme for more details
+## The project folder should be the working directory
+############################################################
+
+
 library(floodnetRfa)
 library(foreach)
 library(doParallel)
@@ -6,13 +13,22 @@ rm(list = ls())
 
 ## Path of the HYDAT database
 ## Create a variable DB_HYDAT
-source('config')
+#source('../config')
+
+## The folder containing the supplementary data.
+DATA_DIR <- 'C:/Users/durochma/Documents/Data/HYDAT_11AUG19'
+
+## Location of the HYDAT database
+DB_HYDAT <- file.path(DATA_DIR, 'Hydat.sqlite3')
+
+## CSV file with meta-data about
+GAUGEDSITES <- read.csv(file.path(DATA_DIR, 'gauged_site.csv'))
 
 ## Resolution of the graphics in pixels (RES x RES)
 RES_FIG <- 640
 
 ## Number of parallel processes
-NCPU <- 4
+NCPU <- 2
 
 ## Cache folder
 DIR_CACHE <- 'cache/autopot'
@@ -30,10 +46,10 @@ if(!file.exists(DIR_CACHE))
 progress.file <- file.path(DIR_CACHE,'progress.log')
 
 ## Load the list of stations to analyse
-stations <- gaugedSites[,1]
+stations <- GAUGEDSITES[,1]
 
 ## Determine the minimal time between extracted peaks
-rarea <- ceiling(4 + log(gaugedSites[,'area']))
+rarea <- ceiling(4 + log(GAUGEDSITES[,'area']))
 
 ## Set-up parallel computing
 cl <- makeCluster(NCPU)
@@ -43,7 +59,7 @@ registerDoParallel(cl)
 t0 <- Sys.time()
 write(format(t0), file = progress.file)
 
-statu <- foreach(ii = 1:8, #seq_along(stations),
+statu <- foreach(ii = seq_along(stations),
 								 .packages = c('CSHShydRology','floodnetRfa'),
 								 .errorhandling = 'pass') %dopar%{
 
@@ -55,14 +71,14 @@ statu <- foreach(ii = 1:8, #seq_along(stations),
 	## Search for thresholds
 	###########################################
 
-	xd <- try(DailyData(site, DB_HYDAT, pad = TRUE, tol = 346)[,-1])
+	xd <- try(DailyData(DB_HYDAT, site, pad = TRUE, tol = 346)[,-1])
 
 	nyear <- ifelse(class(xd) == 'try-error', 0,
 				          length(unique(format(xd$date, '%Y'))))
 
 	## In case of seasonal station
 	if((nyear < 15)){
-		xd <- DailyData(site, DB_HYDAT, pad = TRUE, tol = 60)[,-1]
+		xd <- DailyData(DB_HYDAT, site, pad = TRUE, tol = 60)[,-1]
 		nyear <- length(unique(format(xd$date, '%Y')))
 	}
 
@@ -164,7 +180,7 @@ statu <- foreach(ii = 1:8, #seq_along(stations),
   ## Seasonal analysis
   #############################################
 
-	an <- try(AmaxData(site, DB_HYDAT, year = FALSE), silent = TRUE)
+	an <- try(AmaxData(DB_HYDAT, site, year = FALSE), silent = TRUE)
 
 	if(class(an) == 'try-error'){
 	  an <- ExtractAmax(value~date, xd, tol = 60)
@@ -264,8 +280,9 @@ colnames(xthresh) <- c('station', 'year.amax', 'year.pot',
 											 'auto', 'ppy250', 'ppy225', 'ppy200',
 											 'ppy175', 'ppy150', 'ppy125', 'ppy100')
 
-write.csv(xthresh, file = gzfile('autopot/autopot.csv.gz'), row.names = FALSE)
+## Uncomment to save new results
+# write.csv(xthresh, file = gzfile('autopot/autopot.csv.gz'), row.names = FALSE)
 
 ## verify which stations did not succeeded
-fail.id <- which(!gaugedSites$station %in% xthresh$station)
+fail.id <- which(!GAUGEDSITES$station %in% xthresh$station)
 print(fail.id)

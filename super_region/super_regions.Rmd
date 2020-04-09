@@ -7,31 +7,36 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+## NOTE: for buillding the document the path is relative to the project directory
 ```
 
-```{r, echo = FALSE}
+```{r  echo = FALSE}
 ## Set colors for displaying the clusters
 mycol12 <- c('#a6cee3','#1f78b4','#b2df8a','#33a02c','#fb9a99','#e31a1c',
 						 '#fdbf6f','#ff7f00','#cab2d6','#6a3d9a','#ffff99','#b15928')
 
 col2pch <- function(z) z %/%12 + 16 
 palette(mycol12)
+
+## load gauged_sites.csv as GAUGEDSITES 
+source('config')
 ```
 
 ## Introduction
 
-For a hydrometric station with few years of observations the uncertainty of estimated flood quantiles can be large.
-In such a situation, pooled frequency analysis may be used to reduce model variability by transferring information from nearby sites to a target site.
-Pooling groups are formed according to a notion of distance and  FloodNet recommends using a measure of similarity based on the regularity and the timing of annual maximum discharges.
-The rivers in Canada have a vast diversity of flood regime and the idea of super regions was introduced to pre-filter the hydrometric stations into hydrologically relevant groups before performing pool analysis. 
-The package `floodnetProject16` comes with a set of already selected gauged stations `gaugedSites` where super regions are suggested. 
-This document explained how they were obtained.
+For a hydrometric station with a few years of observations, the uncertainty derived from the estimation of the flood quantiles can be substantial.
+In such a situation, pooled frequency analysis may reduce this variability by transferring information from nearby sites to a target site.
+FloodNet recommends forming pooling groups according to a notion of distance based on a measure of similarity that accounts for the regularity and timing of annual maximum discharges.
+There is a vast diversity of flood regimes among Canadian rivers. 
+Super regions represent hydrologically similar groups of stations that serve as an initial population for performing pooling analysis. 
+The file `gauged_sites.csv` suggests such four classes of super regions and this document explained the methodology behind them.
 
 ## Methodology
 
 We consider two spaces, the descriptor and the geographical space.
 The descriptor space has for coordinates the drainage area (AREA) and mean annual precipitation (MAP), while the geographical space has longitude and latitude for coordinates.
-In Canada, AREA and MAP can be used as surrogates for climate and scale.
+In Canada, AREA and MAP are surrogates for climate and scale.
 See Mostofi Zadeh and Burn (2019) for more details.
 The graphic below shows the 1114 gauged stations of interest inside these two spaces.
 
@@ -40,8 +45,8 @@ The graphic below shows the 1114 gauged stations of interest inside these two sp
 library(floodnetRfa)
 library(CSHShydRology)
 
-desc <- log(gaugedSites[,c('area','map')])
-coord <- gaugedSites[,c('lon','lat')]
+desc <- log(GAUGEDSITES[,c('area','map')])
+coord <- GAUGEDSITES[,c('lon','lat')]
 
 ## Generic function to plot the geographical and physical spaces.
 myfig <- function(col = 'black', pch = 16, legend.plot = TRUE){
@@ -70,8 +75,8 @@ myfig <- function(col = 'black', pch = 16, legend.plot = TRUE){
 myfig(legend.plot = FALSE)
 ```
 
-To create super regions, we used the Euclidean distance between a transformation of the four coordinates previously mentioned.
-We take the log transformation on AREA and MAP to obtain descriptors that are more densely concentrated around its central values (Normally shape) and we employ multidimensional scaling to project the geographical coordinates in a 2D space that tends to preserve the great-circle distance.
+To create super regions, we used the Euclidean distance between the transformation of the four coordinates previously mentioned.
+We take the log transformation on AREA and MAP to obtain descriptors approximately normal, and we employ multidimensional scaling to project the geographical coordinates in a 2D space that tends to preserve the great-circle distance.
 Moreover, all transformed coordinates are centred and scaled before evaluating the distance.
 
 ```{r}
@@ -84,12 +89,12 @@ xd <- cbind(scale(ecoord), scale(desc))
 
 ## Results
 
-Hierarchical clustering techniques have often been used to delineate hydrologically homogenous regions.
-Considering more specifically Ward's method where all sites are initially considered as their own cluster and are gradually paired up with the objective to optimize the intra-variance between clusters.
-This procedure creates a structure in the form of a tree that can be used to form meaningful super regions. 
+Hierarchical clustering techniques is a standard method to delineate hydrologically homogenous regions.
+Here, we consider, more specifically, Ward's method that gradually agglomerate sites into larger clusters while minimizing the intra-cluster variance at each step.
+This procedure creates a tree structure that we can cut to form meaningful super regions. 
 
-The graphic below illustrates super regions of 6 and 12 clusters, which corresponds to the columns `supreg_hc*` in `gaugedSites`.
-The number of clusters is selected based on the relevance of the extract features according to the author's personal judgment.
+The graphic below illustrates super regions of 6 and 12 clusters, which corresponds to the columns `supreg_hc*` in `gauged_site.csv`.
+The number of clusters is selected based on the relevance of the extract features according to the author's judgment.
 We see that the super regions are relatively compact in both the geographical and the descriptor space.
 
 ```{r, fig.height=5, fig.width=10}
@@ -119,7 +124,7 @@ myfig(col = hc.grp12)
 Another method employed to form super regions is the k-mean clustering technique, where each cluster is defined as the set of the nearest sites to a predetermined set of center points. 
 The algorithm is initialized by selecting random centers and update them until reaching optimized intra-cluster variance.
 The figures below illustrate super regions of size 6 and 12 using k-mean clustering, which corresponds to the columns `supreg_km*` in `gaugedSites`.
-In particular `supreg_km12` identifies super regions roughly representing:
+In particular, `supreg_km12` identifies super regions roughly representing:
 
 1. North territories - Large area
 2. Pacific Coast
@@ -154,6 +159,62 @@ supreg <- data.frame(
   supreg_km12 = km.grp12)
 
 ```
+
+## Super regions of new sites
+
+If a site is not in the `gauged_sites` dataset, it can be assigned to one of the existing super regions without performing the complete analysis.
+A simple way of classifying the new station is to affect the super regions of the nearest sites. 
+The example below follows that strategy and applies it to two new sites created by averaging the attributes of existing sites.
+
+```{r}
+## Extract attributes
+xa <- GAUGEDSITES[, c('lon','lat','area','map')]
+xa[,3:4] <- log(xa[,3:4])
+
+## Add two new sites as the average of two existing sites
+xa <- rbind(colMeans(xa[3:4,]), 
+            colMeans(xa[201:202,]),  
+            xa)
+rownames(xa) <- c("new1","new2",GAUGEDSITES$station)
+
+## Index of the sites to classify
+tid <- 1:2
+
+## Compute the distance between scaled data.
+xb <- scale(xa)
+h <- as.matrix(dist(xb))[tid,-tid]
+cid <- apply(h, 1, which.min)
+
+## Super regions of the sites used to create the new sites
+GAUGEDSITES$supreg_hc12[c(3:4,201:202)]
+
+## Newly classified
+GAUGEDSITES$supreg_hc12[cid]
+```
+
+In the previous code, the distance is not the same as in the initial analysis. One reason is that the new sites did not participate in the transformation of the variables. 
+However, the presented approach should provide reasonable approximations due to the size of the initial group.
+
+Alternatively, when using the super regions create by the k-means technique, the user can classify the new sites into a super region based on its nearest centers.  
+The example below illustrate this approach.
+
+```{r}
+## Apply the previous transformation
+xc <- as.data.frame(scale(xa))
+
+## compute the centers
+xlst <- split(xc[-tid,], GAUGEDSITES$supreg_km12)
+xcenters <- t(sapply(xlst, colMeans))
+
+## compute distance to centers
+h <- dist(rbind(xc[tid,], xcenters))
+h <- as.matrix(h)[tid,-tid]
+
+GAUGEDSITES$supreg_km12[c(1:2,201:202)]
+
+apply(h, 1, which.min)
+```
+
 
 ## References
 
